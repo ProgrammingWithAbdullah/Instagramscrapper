@@ -1,0 +1,19 @@
+{
+  "name": "instagramscrapper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local dashboard that pulls public Instagram posts/Reels for a curated list of accounts (via Meta's Business Discovery API) and ranks them by engagement, with Gemini-generated content breakdowns.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "sync": "node scripts/sync.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.4.5",
+    "next": "15.5.29",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  }
+}
