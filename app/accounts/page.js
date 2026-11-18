@@ -1,10 +1,83 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sidebar from "../../components/Sidebar";
+import { csvToObjects } from "../../lib/csv";
 
 function blankRow() {
   return { username: "", niche: "", subcategory: "", type: "creator", limit: 50 };
+}
+
+function normalizeUsername(raw) {
+  return String(raw || "").trim().replace(/^@/, "");
+}
+
+// Flexible header matching so "Account", "Handle", "IG Username" etc. all work,
+// not just an exact "username" column.
+const HEADER_ALIASES = {
+  username: ["username", "account", "handle", "ig", "instagram", "igusername"],
+  niche: ["niche", "category"],
+  subcategory: ["subcategory", "subcat", "sub"],
+  type: ["type", "accounttype", "creatorbrand"],
+  limit: ["limit", "postlimit", "posts", "postcount"],
+};
+
+function findHeader(headers, field) {
+  const aliases = HEADER_ALIASES[field];
+  return headers.find((h) => {
+    const norm = h.toLowerCase().replace(/[^a-z]/g, "");
+    return aliases.some((a) => a === norm);
+  });
+}
+
+function rowsFromCsv(text) {
+  const objects = csvToObjects(text);
+  if (objects.length === 0) return [];
+
+  const headers = Object.keys(objects[0]);
+  const usernameHeader = findHeader(headers, "username");
+  if (!usernameHeader) {
+    throw new Error('No "username" column found — check the header row.');
+  }
+  const nicheHeader = findHeader(headers, "niche");
+  const subHeader = findHeader(headers, "subcategory");
+  const typeHeader = findHeader(headers, "type");
+  const limitHeader = findHeader(headers, "limit");
+
+  // Only include keys for columns that actually exist in the file, so
+  // importing a `username,limit` CSV (say) updates just the limit on
+  // existing matched rows instead of blanking out their niche/subcategory/type.
+  return objects
+    .map((obj) => {
+      const username = normalizeUsername(obj[usernameHeader]);
+      if (!username) return null;
+
+      const entry = { username };
+      if (nicheHeader) entry.niche = obj[nicheHeader];
+      if (subHeader) entry.subcategory = obj[subHeader];
+      if (typeHeader) {
+        entry.type = obj[typeHeader].toLowerCase() === "brand" ? "brand" : "creator";
+      }
+      if (limitHeader) {
+        const limitRaw = Number(obj[limitHeader]);
+        entry.limit = limitRaw > 0 ? Math.min(limitRaw, 50) : 50;
+      }
+      return entry;
+    })
+    .filter(Boolean);
+}
+
+function downloadCsvTemplate() {
+  const csv =
+    "username,niche,subcategory,type,limit\n" +
+    "examplecreator,Fitness,Strength,creator,50\n";
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "accounts-template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function AccountsPage() {
@@ -14,6 +87,8 @@ export default function AccountsPage() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
+  const [importMsg, setImportMsg] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetch("/api/accounts")
@@ -59,6 +134,52 @@ export default function AccountsPage() {
     }
   }
 
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    setImportMsg("Reading file…");
+    try {
+      const text = await file.text();
+      const imported = rowsFromCsv(text);
+      if (imported.length === 0) {
+        setImportMsg("No valid rows found (need at least a username column).");
+        return;
+      }
+
+      // Computed against the current `rows` synchronously (not inside a
+      // setRows updater) so the added/updated counts aren't subject to
+      // React's updater-timing, which isn't guaranteed to run before this
+      // function continues.
+      const next = [...rows];
+      const indexByUsername = new Map(
+        next.map((row, i) => [row.username.toLowerCase(), i])
+      );
+      let added = 0;
+      let updated = 0;
+      for (const entry of imported) {
+        const key = entry.username.toLowerCase();
+        const existingIndex = indexByUsername.get(key);
+        if (existingIndex != null) {
+          next[existingIndex] = { ...next[existingIndex], ...entry };
+          updated += 1;
+        } else {
+          next.push({ ...blankRow(), ...entry });
+          indexByUsername.set(key, next.length - 1);
+          added += 1;
+        }
+      }
+      setRows(next);
+
+      setImportMsg(
+        `Imported ${imported.length} rows (${added} new, ${updated} updated). Review below, then click Save changes.`
+      );
+    } catch (err) {
+      setImportMsg(`Import failed: ${err.message}`);
+    }
+  }
+
   async function handleResync() {
     setSyncing(true);
     setSyncMsg("Syncing — this can take a bit depending on how many accounts you have…");
@@ -88,6 +209,16 @@ export default function AccountsPage() {
           Add or remove the Instagram accounts to track, set each one&apos;s niche/
           subcategory (drives the Library filters) and how many of its recent
           posts to pull per sync (max 50). Save, then Resync to pull fresh data.
+          Or import a batch from a CSV file (a `username` column is required;
+          `niche`, `subcategory`, `type`, `limit` are optional) —{" "}
+          <button
+            className="row-remove"
+            style={{ textDecoration: "underline", fontSize: 13 }}
+            onClick={downloadCsvTemplate}
+          >
+            download a template
+          </button>
+          .
         </div>
 
         {loading ? (
@@ -164,6 +295,16 @@ export default function AccountsPage() {
               <button className="btn" onClick={addRow}>
                 + Add account
               </button>
+              <button className="btn" onClick={() => fileInputRef.current?.click()}>
+                Import CSV
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={handleImportFile}
+              />
               <button className="btn primary" onClick={handleSave} disabled={saving}>
                 {saving ? "Saving…" : "Save changes"}
               </button>
@@ -172,8 +313,11 @@ export default function AccountsPage() {
               </button>
             </div>
 
+            {importMsg && (
+              <div style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 10 }}>{importMsg}</div>
+            )}
             {saveMsg && (
-              <div style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 10 }}>{saveMsg}</div>
+              <div style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 6 }}>{saveMsg}</div>
             )}
             {syncMsg && (
               <div style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 6 }}>{syncMsg}</div>
