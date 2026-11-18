@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import accounts from "../../../data/accounts.json";
+import { readAccountsConfig } from "../../../lib/store";
 
 // Returns the available niches and their subcategories, derived from the
-// static accounts list (not the cache), so filters show up even before the
-// first sync has run.
+// current (dynamic, user-editable) accounts list.
 export async function GET() {
+  const accounts = await readAccountsConfig();
   const byNiche = {};
 
   for (const account of accounts) {

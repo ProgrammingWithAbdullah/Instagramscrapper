@@ -1,5 +1,6 @@
-// Pulls the latest posts/Reels for every account in data/accounts.json via
-// Instagram's Business Discovery API and writes each account into Redis.
+// Pulls the latest posts/Reels for every account currently configured (see
+// the Accounts page / `npm run seed`) via Instagram's Business Discovery API
+// and writes each account into Redis.
 // Run with: npm run sync
 
 require("dotenv").config({ path: ".env" });

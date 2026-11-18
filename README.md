@@ -103,17 +103,27 @@ Fill in `IG_BUSINESS_ACCOUNT_ID`, `IG_ACCESS_TOKEN`, `GEMINI_API_KEY`,
 `KV_REST_API_URL`, and `KV_REST_API_TOKEN` in `.env`. **Never commit `.env`** — it's
 already gitignored.
 
-### 5. Pull the data
+### 5. Seed the account list (first time only)
+
+```bash
+npm run seed
+```
+
+Loads the default 50 accounts from `data/accounts.json` into Redis — only if the
+accounts list there is still empty, so it's safe to skip or re-run. After this, manage
+accounts from the **Accounts** page in the app instead of this file.
+
+### 6. Pull the data
 
 ```bash
 npm run sync
 ```
 
-This fetches up to 50 recent posts per account for all 50 accounts and writes each
-account into Redis. Takes well under a minute. Re-run it any time to refresh (or use
-the "Resync accounts" button once the app is running).
+Fetches each account's configured number of recent posts (50 by default, editable per
+account) and writes them into Redis. Takes well under a minute. Re-run it any time to
+refresh (or use the "Resync accounts" button once the app is running).
 
-### 6. Run the app
+### 7. Run the app
 
 ```bash
 npm run dev
@@ -123,14 +133,21 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Editing the tracked accounts
 
-Edit [`data/accounts.json`](data/accounts.json) — each entry is:
+Accounts are managed live from the **Accounts** page in the app (sidebar), not by
+editing a file — add/remove accounts, set each one's `niche` / `subcategory` (these
+drive the Library's filter pills), `type` (`creator` or `brand`, feeds the "Posted by"
+filter), and a per-account **post limit** (how many of its recent posts to pull each
+sync, 1–50). Click **Save changes**, then **Resync accounts** to pull fresh data for
+whatever you just changed. Removing an account also deletes its cached posts.
 
-```json
-{ "username": "someaccount", "niche": "Fitness", "subcategory": "Strength", "type": "creator" }
-```
+This list lives in Redis (`ig:accounts:config`), not in a file, so it persists
+independently on Vercel and survives redeploys.
 
-`niche` and `subcategory` drive the filter pills in the UI; `type` is `"creator"` or
-`"brand"` and feeds the "Posted by" filter. Re-run `npm run sync` after editing.
+[`data/accounts.json`](data/accounts.json) still exists in the repo, but only as
+**one-time seed data**: `npm run seed` loads it into Redis *if and only if* the
+accounts list is currently empty (a brand-new database). It's never read at request
+time, and running `seed` again after you've started editing from the UI is a safe
+no-op — it won't overwrite your changes.
 
 ## Deploying to Vercel
 
@@ -150,13 +167,16 @@ Edit [`data/accounts.json`](data/accounts.json) — each entry is:
    `CRON_SECRET` does **not** need to be added manually — Vercel sets it automatically
    the first time it detects a `crons` entry in `vercel.json` (already included in
    this repo) and attaches it to the cron request for you.
-4. Deploy. The first deploy will show **0 posts** until data exists in Redis — either:
-   - click **Resync accounts** in the deployed app once, or
-   - wait for the daily cron job (`vercel.json` runs it at 06:00 UTC — edit the
-     `schedule` there to change that; Hobby plan allows once/day), or
-   - run `npm run sync` locally against the **same** Redis database (pull its
-     credentials into your local `.env` with `vercel env pull .env.development.local`,
-     or reuse the values you already have).
+4. Deploy. On a **fresh** Redis database the accounts list is also empty, so **Resync
+   accounts** won't do anything yet — add accounts first, either:
+   - from the deployed app's **Accounts** page (add rows, Save), or
+   - by running `npm run seed` locally against that same database (pull its
+     credentials with `vercel env pull .env.development.local`, see step 5) to load
+     the default 50.
+
+   Then click **Resync accounts** in the deployed app, or wait for the daily cron job
+   (`vercel.json` runs it at 06:00 UTC — edit the `schedule` there to change that;
+   Hobby plan allows once/day).
 5. To develop locally against the same deployed database afterward:
    ```bash
    vercel link
@@ -166,17 +186,21 @@ Edit [`data/accounts.json`](data/accounts.json) — each entry is:
 ## Project structure
 
 ```
-app/                Next.js App Router pages + API routes
-  api/posts/         GET filtered/sorted posts from the cache
-  api/filters/       GET available niches/subcategories
-  api/breakdown/     POST -> generate (or return cached) Gemini breakdown for a post
-  api/sync/          POST -> trigger a full resync from the UI
-  api/cron/sync/     GET -> same resync, called by Vercel Cron (protected by CRON_SECRET)
-components/          PostCard, PostModal (React client components)
-lib/                 instagram.js (Business Discovery), gemini.js, sync.js, store.js, kv.js, posts.js, format.js
-data/accounts.json   the 50 tracked accounts (committed; this is the only thing in data/)
-scripts/sync.js      CLI entry point for npm run sync
-vercel.json          Cron schedule for the daily auto-resync
+app/                 Next.js App Router pages + API routes
+  page.js             Library view
+  accounts/page.js     Accounts management view
+  api/posts/           GET filtered/sorted posts from the cache
+  api/filters/          GET available niches/subcategories
+  api/accounts/         GET/PUT the tracked-accounts list
+  api/breakdown/        POST -> generate (or return cached) Gemini breakdown for a post
+  api/sync/             POST -> trigger a full resync from the UI
+  api/cron/sync/         GET -> same resync, called by Vercel Cron (protected by CRON_SECRET)
+components/           PostCard, PostModal, Sidebar (React client components)
+lib/                  instagram.js (Business Discovery), gemini.js, sync.js, store.js, kv.js, posts.js, format.js
+data/accounts.json    one-time seed data only (see "Editing the tracked accounts")
+scripts/sync.js       CLI entry point for npm run sync
+scripts/seed-accounts.js  CLI entry point for npm run seed
+vercel.json           Cron schedule for the daily auto-resync
 ```
 
 ## Tech stack

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import PostCard from "../components/PostCard";
 import PostModal from "../components/PostModal";
+import Sidebar from "../components/Sidebar";
 
 export default function Home() {
   const [niches, setNiches] = useState([]);
@@ -78,12 +79,7 @@ export default function Home() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="brand">📊 IG Scrapper</div>
-        <div className="nav-item active">Library</div>
-        <div className="nav-item">Accounts</div>
-        <div className="nav-item">Settings</div>
-      </aside>
+      <Sidebar />
 
       <main className="main">
         <div className="header-row">
@@ -188,8 +184,10 @@ export default function Home() {
 
         {!loading && posts.length === 0 && (
           <div style={{ color: "var(--text-dim)", marginTop: 40 }}>
-            No cached posts yet. Fill in your .env (see README), then click
-            &quot;Resync accounts&quot; above or run <code>npm run sync</code> in a terminal.
+            No cached posts yet. Make sure your .env is filled in (see README), add
+            accounts on the <a href="/accounts">Accounts</a> page if you haven&apos;t
+            run <code>npm run seed</code> yet, then click &quot;Resync accounts&quot;
+            above.
           </div>
         )}
       </main>

@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "sync": "node scripts/sync.js"
+    "sync": "node scripts/sync.js",
+    "seed": "node scripts/seed-accounts.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
