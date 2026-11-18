@@ -1,5 +1,5 @@
 // Pulls the latest posts/Reels for every account in data/accounts.json via
-// Instagram's Business Discovery API and writes the result to data/cache.json.
+// Instagram's Business Discovery API and writes each account into Redis.
 // Run with: npm run sync
 
 require("dotenv").config({ path: ".env" });
@@ -15,7 +15,7 @@ async function main() {
   console.log(
     `\nDone. ${summary.synced}/${summary.total} accounts in cache, ${summary.failures} failed this run.`
   );
-  console.log("Cache written to data/cache.json");
+  console.log("Data written to Redis.");
 }
 
 main().catch((err) => {

@@ -12,7 +12,7 @@ export async function GET(request) {
   const sort = searchParams.get("sort") || "best"; // best|newest|likes|comments|rate
   const search = (searchParams.get("search") || "").toLowerCase().trim();
 
-  const { updatedAt, rows } = getAllPosts();
+  const { updatedAt, rows } = await getAllPosts();
 
   let filtered = rows.filter((row) => {
     if (niche && row.account.niche !== niche) return false;
